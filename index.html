@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Угадай тип клиента — тренажёр для страховых агентов</title>
+<style>
+  :root {
+    --navy: #0B2E5E;
+    --blue: #2F7BD8;
+    --sky: #8CC0F0;
+    --paper: #F7F5F0;
+    --ink: #14233B;
+    --muted: #7A8BA3;
+    --ok: #1B7A4E;
+    --bad: #B3261E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Декоративный фон в стиле загруженного изображения */
+  .bg-top, .bg-bottom {
+    position: fixed;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .bg-top {
+    left: 0; top: 0;
+    width: min(70vw, 900px);
+    height: min(50vw, 480px);
+    background: linear-gradient(115deg, var(--navy) 0%, #1F5FB0 42%, var(--blue) 62%, transparent 63%);
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+  .bg-top::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(circle, rgba(47,123,216,.55) 1.4px, transparent 1.9px) 0 0 / 12px 12px;
+    mask-image: linear-gradient(120deg, #000 10%, transparent 75%);
+    -webkit-mask-image: linear-gradient(120deg, #000 10%, transparent 75%);
+  }
+  .bg-bottom {
+    right: 0; bottom: 0;
+    width: min(70vw, 900px);
+    height: min(50vw, 480px);
+    background: linear-gradient(295deg, var(--navy) 0%, #1F5FB0 42%, var(--blue) 62%, transparent 63%);
+    clip-path: polygon(100% 100%, 0 100%, 100% 0);
+  }
+  .bg-bottom::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(circle, rgba(47,123,216,.55) 1.4px, transparent 1.9px) 0 0 / 12px 12px;
+    mask-image: linear-gradient(300deg, #000 10%, transparent 75%);
+    -webkit-mask-image: linear-gradient(300deg, #000 10%, transparent 75%);
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 60px;
+  }
+
+  .card {
+    background: rgba(255,255,255,.9);
+    border-radius: 18px;
+    box-shadow: 0 8px 30px rgba(11,46,94,.12);
+    padding: 26px;
+  }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ---------- Старт ---------- */
+  .hero { text-align: center; padding: 10px 0; }
+  .hero h1 { color: var(--navy); font-size: clamp(26px, 5vw, 36px); margin: 8px 0 14px; }
+  .hero p { font-size: 16px; line-height: 1.55; margin: 0 0 12px; color: #33465F; }
+
+  /* ---------- Верхняя панель ---------- */
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 8px;
+    font-size: 14px; color: #4A5E78; margin-bottom: 8px;
+  }
+  .score b { font-weight: 700; }
+  .score .c { color: var(--ok); margin-left: 12px; }
+  .score .w { color: var(--bad); margin-left: 12px; }
+  .progress { height: 6px; background: rgba(11,46,94,.1); border-radius: 4px; overflow: hidden; }
+  .progress > div {
+    height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--navy), var(--blue));
+    transition: width .3s;
+  }
+
+  /* ---------- Фраза клиента ---------- */
+  .phrase {
+    font-size: clamp(19px, 4vw, 25px);
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--navy);
+    text-align: center;
+    min-height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px 8px;
+    margin-top: 10px;
+  }
+  .phrase::before { content: "“"; margin-right: 4px; color: var(--blue); }
+  .phrase::after  { content: "”"; margin-left: 4px; color: var(--blue); }
+
+  /* ---------- Оси и кнопки ---------- */
+  .axis { max-width: 540px; margin: 10px auto 0; }
+  .axis-label {
+    font-size: 12px; font-weight: 300; color: var(--muted);
+    text-align: center; letter-spacing: .3px; padding: 2px 0;
+  }
+  .axis-row {
+    display: flex; justify-content: space-between;
+    font-size: 12px; font-weight: 300; color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .axis-wrap { display: flex; align-items: stretch; gap: 6px; }
+  .axis-wrap .grid { flex: 1; min-width: 0; }
+  .side-label {
+    writing-mode: vertical-rl;
+    font-size: 11px; font-weight: 300; color: var(--muted);
+    letter-spacing: .3px; text-align: center; white-space: nowrap;
+  }
+  .side-label.left { transform: rotate(180deg); }
+  .side-label.right { writing-mode: vertical-rl; transform: none; }
+
+  .grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px 0;
+  }
+  /* тонкие оси через центр */
+  .grid::before {
+    content: ""; position: absolute;
+    left: 50%; top: 0; bottom: 0; width: 1px;
+    background: rgba(11,46,94,.13);
+  }
+  .grid::after {
+    content: ""; position: absolute;
+    top: 50%; left: 0; right: 0; height: 1px;
+    background: rgba(11,46,94,.13);
+  }
+
+  .type-btn {
+    position: relative; z-index: 1;
+    border: 0; border-radius: 14px;
+    padding: 18px 12px; min-height: 84px;
+    font-size: 17px; font-weight: 600; color: #fff;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(11,46,94,.2);
+    transition: transform .12s, opacity .2s, box-shadow .2s;
+    font-family: inherit;
+  }
+  .type-btn[data-type="friendly"]  { background: linear-gradient(135deg, #2F7BD8, #4A9AE8); }
+  .type-btn[data-type="emotional"] { background: linear-gradient(135deg, #1F5FB0, #3A7FD0); }
+  .type-btn[data-type="pedantic"]  { background: linear-gradient(135deg, #0B2E5E, #1B4A8A); }
+  .type-btn[data-type="ambitious"] { background: linear-gradient(135deg, #0E6BC4, #1E88E5); }
+  @media (hover: hover) {
+    .type-btn:not(:disabled):hover { transform: translateY(-2px); }
+  }
+  .type-btn:disabled { cursor: default; }
+  .type-btn.correct { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--navy); }
+  .type-btn.wrong   { opacity: .4; }
+  .type-btn .mark { display: block; font-size: 13px; font-weight: 400; opacity: .9; margin-top: 4px; min-height: 16px; }
+
+  /* ---------- Пояснение ---------- */
+  .feedback {
+    display: none;
+    margin-top: 18px;
+    border-top: 1px solid rgba(11,46,94,.12);
+    padding-top: 16px;
+  }
+  .feedback.show { display: block; }
+  .verdict { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .verdict.ok { color: var(--ok); }
+  .verdict.bad { color: var(--bad); }
+  .type-name { font-size: 15px; color: var(--navy); margin-bottom: 10px; }
+  .type-name b { font-weight: 700; }
+  .info h4 {
+    margin: 12px 0 3px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--blue);
+  }
+  .info p { margin: 0; font-size: 15px; line-height: 1.5; }
+
+  .btn-primary, .btn-secondary {
+    display: block; width: 100%; text-align: center; text-decoration: none;
+    border-radius: 12px; padding: 14px 20px; font-size: 16px; font-weight: 600;
+    cursor: pointer; font-family: inherit; margin-top: 12px;
+  }
+  .btn-primary { background: var(--navy); color: #fff; border: 0; }
+  .btn-secondary { background: transparent; color: var(--navy); border: 2px solid var(--blue); }
+  .btn-primary:hover, .btn-secondary:hover { opacity: .92; }
+
+  /* ---------- Результат ---------- */
+  .result { text-align: center; }
+  .result .big { font-size: 56px; font-weight: 800; color: var(--navy); margin: 8px 0 0; }
+  .result .of { font-size: 16px; color: var(--muted); margin-bottom: 14px; }
+  .result .stats { font-size: 16px; margin-bottom: 14px; }
+  .result .stats .c { color: var(--ok); font-weight: 700; }
+  .result .stats .w { color: var(--bad); font-weight: 700; }
+  .result .msg { font-size: 17px; line-height: 1.5; color: #33465F; margin: 6px 0 16px; }
+  .reg-note {
+    margin-top: 18px; padding: 14px; border-radius: 12px;
+    background: rgba(47,123,216,.08); font-size: 14px; line-height: 1.5; color: #33465F;
+    text-align: left;
+  }
+  .reg-note b { color: var(--navy); }
+
+  @media (max-width: 480px) {
+    .card { padding: 18px; }
+    .type-btn { min-height: 76px; font-size: 15px; padding: 14px 8px; }
+    .phrase { min-height: 100px; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-top"></div>
+<div class="bg-bottom"></div>
+
+<div class="wrap">
+  <div class="card">
+
+    <!-- ===== Старт ===== -->
+    <section id="screen-start" class="screen active">
+      <div class="hero">
+        <h1>Угадай тип клиента</h1>
+        <p>Вы услышите (прочитаете) фразу клиента. Определите, какой это тип, и нажмите нужную кнопку на схеме.</p>
+        <p>В тренажёре 10 вопросов. Порог успешного прохождения — 8 из 10.</p>
+        <button class="btn-primary" id="start-btn">Начать</button>
+      </div>
+    </section>
+
+    <!-- ===== Вопросы ===== -->
+    <section id="screen-quiz" class="screen">
+      <div class="topbar">
+        <div id="q-counter">Вопрос 1 из 10</div>
+        <div class="score">
+          Верно: <b class="c" id="score-correct">0</b>
+          Неверно: <b class="w" id="score-wrong">0</b>
+        </div>
+      </div>
+      <div class="progress"><div id="progress-bar"></div></div>
+
+      <div class="phrase" id="phrase"></div>
+
+      <div class="axis">
+        <div class="axis-label">Фокус на людей и отношения</div>
+        <div class="axis-wrap">
+          <span class="side-label left">Неторопливое решение</span>
+          <div class="grid">
+            <button class="type-btn" data-type="friendly">Дружелюбный<span class="mark"></span></button>
+            <button class="type-btn" data-type="emotional">Эмоциональный<span class="mark"></span></button>
+            <button class="type-btn" data-type="pedantic">Педантичный<span class="mark"></span></button>
+            <button class="type-btn" data-type="ambitious">Амбициозный<span class="mark"></span></button>
+          </div>
+          <span class="side-label right">Быстрое решение</span>
+        </div>
+        <div class="axis-label">Фокус на задачу</div>
+      </div>
+
+      <div class="feedback" id="feedback">
+        <div class="verdict" id="verdict"></div>
+        <div class="type-name" id="type-name"></div>
+        <div class="info">
+          <h4>Как узнать за минуту</h4>
+          <p id="info-how"></p>
+          <h4>Что покупает</h4>
+          <p id="info-buys"></p>
+          <h4>Что убивает продажу</h4>
+          <p id="info-kills"></p>
+        </div>
+        <button class="btn-primary" id="next-btn">Дальше</button>
+      </div>
+    </section>
+
+    <!-- ===== Результат ===== -->
+    <section id="screen-result" class="screen">
+      <div class="result">
+        <div class="axis-label">Ваш результат</div>
+        <div class="big" id="res-big">0</div>
+        <div class="of">правильных ответов из 10</div>
+        <div class="stats">Верно: <span class="c" id="res-c">0</span> &nbsp;·&nbsp; Неверно: <span class="w" id="res-w">0</span></div>
+        <div class="msg" id="res-msg"></div>
+        <button class="btn-primary" id="again-btn">Пройти заново</button>
+        <a class="btn-secondary" href="https://forms.yandex.ru/u/6ac8d2f895add54d424874cb" target="_blank" rel="noopener">Зарегистрироваться</a>
+        <div class="reg-note">
+          <b>Для получения баллов необходима регистрация.</b>
+          Укажите ФИО и название АЦ/УО.
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  const REG_URL = 'https://forms.yandex.ru/u/6ac8d2f895add54d424874cb';
+  const TOTAL = 10;
+  const PASS = 8;
+  const STORE_KEY = 'guess_client_type_used_v1';
+
+  const TYPES = {
+    friendly: {
+      name: 'Дружелюбный',
+      how: 'Решает не один и боится давления. Соглашается из вежливости, отказывает молча, часто тянет с ответом.',
+      buys: 'Сервис и поддержку: «звонить можно по любому вопросу», отзывы, стабильную цену без скачков.',
+      kills: '«Решайте сейчас», повышение голоса, холодный расчёт без человеческого контакта.'
+    },
+    emotional: {
+      name: 'Эмоциональный',
+      how: 'Запоминает эмоциональную ситуацию, а не условия, и решает, пока эмоция держится.',
+      buys: 'Живой рассказ: история похожего клиента, что происходит после страхового случая, кому звонить и кто приедет.',
+      kills: 'Сухой список условий, цифры и факты без контекста истории.'
+    },
+    pedantic: {
+      name: 'Педантичный',
+      how: 'Цепляется за формулировки и цифры, просит материалы и проверяет на точность. Решение приходит после сверки.',
+      buys: 'Таблица рисков, точные сроки выплат, правила и алгоритм действий при страховом случае.',
+      kills: '«Повторите мне на слово», ультиматум со сроком, эмоции вместо фактов.'
+    },
+    ambitious: {
+      name: 'Амбициозный',
+      how: 'Считает минуты, требует варианты и конкретные цифры, отсекает всё, что не влияет на решение.',
+      buys: 'Выбор из двух-трёх программ, цифры, выгоды и конкретные сроки решения вопроса.',
+      kills: 'Долгие прелюдии и детализация пунктов.'
+    }
+  };
+
+  const PHRASES = [
+    { id: 'a1', type: 'ambitious', text: 'Давайте без прелюдий. Два варианта, цена — и я решаю сегодня' },
+    { id: 'a2', type: 'ambitious', text: 'Сколько это займёт? Детали не нужны, мне нужен результат' },
+    { id: 'a3', type: 'ambitious', text: 'Короче: если дешевле — берём, если нет — не тратьте моё время' },
+    { id: 'a4', type: 'ambitious', text: 'Три минуты. Что вы предлагаете и почему у вас лучше, чем у остальных?' },
+    { id: 'p1', type: 'pedantic', text: 'Пришлите правила страхования, я хочу прочитать о франшизе' },
+    { id: 'p2', type: 'pedantic', text: 'В пункте 4.2 написано „иные обстоятельства“. Что это значит, поясните' },
+    { id: 'p3', type: 'pedantic', text: 'Нужна таблица: что входит, что не входит, сроки выплат. Желательно письменно' },
+    { id: 'p4', type: 'pedantic', text: 'Скиньте расчёт, и я сверю с цифрами прошлого года' },
+    { id: 'e1', type: 'emotional', text: 'У соседки тётя полгода лечилась за свой счёт, я до сих пор переживаю за неё' },
+    { id: 'e2', type: 'emotional', text: 'Ой, а вы сами страховались? Как это было, расскажите' },
+    { id: 'e3', type: 'emotional', text: 'Представляю, как им было страшно! Хорошо, что хотя бы помощь приехала' },
+    { id: 'e4', type: 'emotional', text: 'Ой, всё, не помню уже. Давайте вы мне сами расскажете, как лучше' },
+    { id: 'f1', type: 'friendly', text: 'Мне всё нравится, но надо посоветоваться с мужем, он у меня осторожный' },
+    { id: 'f2', type: 'friendly', text: 'Давайте без спешки. Я не хочу, чтобы вы на меня давили' },
+    { id: 'f3', type: 'friendly', text: 'Боюсь, что буду звонить вам с глупыми вопросами и надоем' },
+    { id: 'f4', type: 'friendly', text: 'Мне важно знать, кому я могу позвонить и что меня проконсультируют' }
+  ];
+
+  const $ = id => document.getElementById(id);
+  let run = [], idx = 0, correct = 0, wrong = 0, answered = false;
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function loadUsed() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveUsed(obj) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(obj)); } catch (e) {}
+  }
+
+  // Берём фразы типа, которые ещё не выпадали в текущем круге; когда круг исчерпан — начинаем новый
+  function pickForType(type, n, store) {
+    const all = PHRASES.filter(p => p.type === type);
+    const used = store[type] || [];
+    let picked = shuffle(all.filter(p => !used.includes(p.id))).slice(0, n);
+    if (picked.length < n) {
+      const rest = shuffle(all.filter(p => !picked.includes(p))).slice(0, n - picked.length);
+      picked = picked.concat(rest);
+      store[type] = picked.map(p => p.id);
+    } else {
+      store[type] = used.concat(picked.map(p => p.id));
+    }
+    return picked;
+  }
+
+  // 10 вопросов: по 2 фразы каждого типа + ещё 2 случайных типа по 3 фразы
+  function buildRun() {
+    const keys = Object.keys(TYPES);
+    const extra = shuffle(keys).slice(0, 2);
+    const store = loadUsed();
+    let list = [];
+    keys.forEach(k => {
+      const n = extra.includes(k) ? 3 : 2;
+      list = list.concat(pickForType(k, n, store));
+    });
+    saveUsed(store);
+    return shuffle(list);
+  }
+
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+    window.scrollTo(0, 0);
+  }
+
+  function updateScore() {
+    $('score-correct').textContent = correct;
+    $('score-wrong').textContent = wrong;
+  }
+
+  function startRun() {
+    run = buildRun();
+    idx = 0; correct = 0; wrong = 0;
+    show('screen-quiz');
+    renderQ();
+  }
+
+  function renderQ() {
+    answered = false;
+    const q = run[idx];
+    $('q-counter').textContent = `Вопрос ${idx + 1} из ${TOTAL}`;
+    $('progress-bar').style.width = (idx / TOTAL * 100) + '%';
+    $('phrase').textContent = q.text;
+    updateScore();
+    document.querySelectorAll('.type-btn').forEach(b => {
+      b.disabled = false;
+      b.classList.remove('correct', 'wrong');
+      b.querySelector('.mark').textContent = '';
+    });
+    $('feedback').classList.remove('show');
+  }
+
+  function answer(type, btn) {
+    if (answered) return;
+    answered = true;
+    const q = run[idx];
+    const ok = type === q.type;
+    ok ? correct++ : wrong++;
+    updateScore();
+
+    document.querySelectorAll('.type-btn').forEach(b => {
+      b.disabled = true;
+      if (b.dataset.type === q.type) {
+        b.classList.add('correct');
+        b.querySelector('.mark').textContent = '✓ правильный ответ';
+      } else if (b === btn) {
+        b.classList.add('wrong');
+        b.querySelector('.mark').textContent = '✕ ваш ответ';
+      }
+    });
+
+    const info = TYPES[q.type];
+    const verdict = $('verdict');
+    verdict.textContent = ok ? 'Верно!' : 'Неверно';
+    verdict.className = 'verdict ' + (ok ? 'ok' : 'bad');
+    $('type-name').innerHTML = `Это клиент типа: <b>${info.name}</b>`;
+    $('info-how').textContent = info.how;
+    $('info-buys').textContent = info.buys;
+    $('info-kills').textContent = info.kills;
+    $('next-btn').textContent = idx < TOTAL - 1 ? 'Дальше' : 'Посмотреть результат';
+    $('feedback').classList.add('show');
+    $('feedback').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function next() {
+    idx++;
+    if (idx >= TOTAL) {
+      showResult();
+    } else {
+      renderQ();
+      window.scrollTo(0, 0);
+    }
+  }
+
+  function showResult() {
+    $('res-big').textContent = correct;
+    $('res-c').textContent = correct;
+    $('res-w').textContent = wrong;
+    const passed = correct >= PASS;
+    $('res-msg').textContent = passed
+      ? 'Отлично! Вы уверенно определяете тип клиента по фразе.'
+      : 'Пока не на уровне 8 из 10. Пройдите тренажёр заново: фразы будут другими.';
+    show('screen-result');
+  }
+
+  document.querySelectorAll('.type-btn').forEach(btn => {
+    btn.addEventListener('click', () => answer(btn.dataset.type, btn));
+  });
+  $('start-btn').addEventListener('click', startRun);
+  $('next-btn').addEventListener('click', next);
+  $('again-btn').addEventListener('click', startRun);
+</script>
+</body>
+</html>
